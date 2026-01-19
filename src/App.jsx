@@ -26,6 +26,7 @@ import FunnelChart from "./components/charts/FunnelChart"
 import DonutChart from "./components/charts/DonutChart" // ✅ Import
 import AreaChart from "./components/charts/AreaChart" // ✅ Import
 import CarStorageChart from "./components/charts/CarStorageChart" // ✅ Import
+import ComboChart from "./components/charts/ComboChart" // ✅ Import
 
 export default function App() {
   const GRID_ROW = 36
@@ -291,6 +292,32 @@ export default function App() {
     })
   }, [active, filteredProduction, selectedMonth, selectedCountryKey])
 
+  // Monthly Profit vs Target Data for ComboChart
+  const monthlyProfitVsTarget = useMemo(() => {
+    const months = sample.monthlyProduction.map(m => m.month)
+    const cKey = selectedCountryKey || "ALL"
+
+    return months.map(month => {
+      const { unitSalePrice, unitCost } = getUnitEconomics(cKey, month)
+
+      // Calculate orders and production for the month
+      const orders = getMonthlyOrderTotal(month, cKey)
+      const prod = selectedCountry
+        ? d3.sum((sample.byCountry?.[selectedCountry]?.monthlyProduction || []).filter(x => x.month === month), d => d.value)
+        : d3.sum(Object.keys(sample.byCountry || {}), c => {
+          const mp = sample.byCountry?.[c]?.monthlyProduction || []
+          return d3.sum(mp.filter(x => x.month === month), d => d.value)
+        })
+
+      const revenue = orders * unitSalePrice
+      const cost = prod * unitCost
+      const profit = revenue - cost
+      const target = profit * 1.2 // Hedef = Kârın %20 fazlası
+
+      return { month, profit: Math.max(0, profit), target: Math.max(0, target) }
+    })
+  }, [selectedCountry, selectedCountryKey, getMonthlyOrderTotal])
+
   const countries = useMemo(() => Array.from(new Set(sample.customers.map((c) => c.country))).sort(), [])
   const filteredCustomers = useMemo(() => sample.customers.filter(c => selectedCountry ? c.country === selectedCountry : true), [selectedCountry])
   // --- DATA CALCULATIONS END ---
@@ -515,15 +542,22 @@ export default function App() {
                 </Card>
               </div>
               <div style={{ gridRow: "span 8", paddingBottom: 10 }}>
-                <Card title="Scatter Chart" darkMode={darkMode}>
+                <Card title="Üretim & Sipariş Farkı (Scatter Chart)" darkMode={darkMode}>
                   <ScatterChart data={scatterSeries} showTip={showTip} hideTip={hideTip} darkMode={darkMode} />
                 </Card>
               </div>
-
-              <div style={{ gridRow: "span 10", paddingBottom: -600 }}>
-                <Card title="Kümülatif Fark" darkMode={darkMode}>
-                  <WaterfallChart data={waterfallSeries} showTip={showTip} hideTip={hideTip} darkMode={darkMode} />
-                </Card>
+              {/* Column: Waterfall + Combo Chart stacked */}
+              <div style={{ gridRow: "span 18", display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <Card title="Kümülatif Fark" darkMode={darkMode}>
+                    <WaterfallChart data={waterfallSeries} showTip={showTip} hideTip={hideTip} darkMode={darkMode} />
+                  </Card>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <Card title="Brüt Kâr vs Hedef" darkMode={darkMode}>
+                    <ComboChart data={monthlyProfitVsTarget} barKey="profit" lineKey="target" xKey="month" showTip={showTip} hideTip={hideTip} darkMode={darkMode} />
+                  </Card>
+                </div>
               </div>
 
               {/* Col 2: Map + Combined Charts */}
